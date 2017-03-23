@@ -65,10 +65,11 @@
 #define TOO_CLOSE     7
 
 // The speed at which the parade moves, too fast drowns out sound
-#define PARADE_FACTOR 10
+#define PARADE_FACTOR 15
 
 // How much to calibrate the speed on each side
 #define CALIBRATION_FACTOR 10
+#define CALIBRATION_MIN 15
 
 extern uint8_t packetbuffer[];  // Buffer for Bluetooth control packets
 uint8_t Mode = DEFAULT_MODE;    // Default mode, no restrictions on user
@@ -84,7 +85,7 @@ void setup () {
 
   Serial.begin(9600);
 
-  playStartMelody ();
+   playStartMelody ();
   
   bleSetup();   // Bluetooth setup
   LEDSetup();   // LED setup
@@ -96,6 +97,7 @@ void setup () {
 void loop () {
   if (Mode == NANNY_MODE) {
     checkColors ();
+    checkDistance ();
   }
 
   if (bleGetInput ()) {
@@ -114,6 +116,7 @@ void loop () {
   }
 }
 
+// Check to see if the robot has been stopped by something red
 void checkColors () {
   getRGBInput();
   if(redAhead()){
@@ -128,6 +131,18 @@ void checkColors () {
   }
 }
 
+void checkDistance () {
+  float distanceInFront = getDistanceInCentimeters();
+  // This measurement takes 100 ms.
+  if (distanceInFront < TOO_CLOSE) {
+    Serial.println(F("Nanny thinks you'll crash."));
+    moveRobotBackward(MAX_SPEED, MAX_SPEED);
+    delay(500);
+    stopRobot();
+  }
+}
+
+// Respond to Bluetooth input
 void respondToInput (uint8_t buttonNumber, bool buttonPressed) {
   if (buttonPressed) {
     Serial.print ("Button "); Serial.print(buttonNumber);
@@ -173,7 +188,9 @@ void respondToInput (uint8_t buttonNumber, bool buttonPressed) {
           }
           if (Mode == CALIBRATION_MODE) {
             left -= CALIBRATION_FACTOR;
-            Serial.println(left);
+            if (left <= CALIBRATION_MIN) {
+              left = MAX_SPEED;
+            }
             playHighBeep();
           }
           return;
@@ -184,7 +201,9 @@ void respondToInput (uint8_t buttonNumber, bool buttonPressed) {
           }
           if (Mode == CALIBRATION_MODE) {
             right -= CALIBRATION_FACTOR;
-            Serial.println(right);
+            if (right <= CALIBRATION_MIN) {
+              right = MAX_SPEED;
+            }
             playHighBeep();
           }
           return;
@@ -199,6 +218,7 @@ void respondToInput (uint8_t buttonNumber, bool buttonPressed) {
     } 
 }
 
+// Set the robot mode
 void setRobotMode (uint8_t mode) {
   Serial.print(F("Robot mode set: "));
   Serial.print(mode); Serial.println();
@@ -206,20 +226,9 @@ void setRobotMode (uint8_t mode) {
   blinkLED(BLINK_MAX);
 }
 
+// True if nanny is kind, false otherwise
 bool nannyLetsMeMove () {
   if (Mode != NANNY_MODE) return false;
-
-  // This measurement takes 100 ms.
-  float distanceInFront = getDistanceInCentimeters();
-
-  if (distanceInFront < TOO_CLOSE) {
-    Serial.println(F("Nanny thinks you'll crash."));
-    moveRobotBackward(MAX_SPEED, MAX_SPEED);
-    delay(500);
-    stopRobot();
-    return false;
-  }
-
   if (greenLight) {
     Serial.println(F("Nanny says, 'Green, go.'"));
     return true;
